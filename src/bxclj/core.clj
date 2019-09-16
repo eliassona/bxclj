@@ -96,6 +96,9 @@
 
 (def-json-bx fetch-stealth base-2-filter)
 
+(defn validate-tx [base-16-tx]
+  (bx "validate-tx" base-16-tx))
+
 ;;hash commands
 (def-bx sha160 base16-value)
 (def-bx sha256 base16-value)
@@ -127,7 +130,16 @@
 (def-bx script-encode script) 
 (def-bx script-to-address script)
 (def-json-bx tx-decode base-16-tx)
-
+(defn tx-encode [tx-hash index payment-address sats]
+  (let [format-fn (partial format "%s:%s")]
+    (bx "tx-encode" "-i" (format-fn tx-hash index) "-o" (format-fn payment-address sats)))) 
+   
+(def-bx input-sign ec-private-key contract base-16-tx)
+(def-bx input-set endorsement-script base-16-tx)    
+(defn input-validate [ec-public-key contract endorsement base-16-tx]
+  (= 
+    (bx "input-validate" ec-public-key contract endorsement base-16-tx)
+    "The endorsement is valid."))
 
 
 ;;useful stuff
