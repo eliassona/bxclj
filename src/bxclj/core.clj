@@ -19,7 +19,10 @@
 
 (defmacro def-bx [cmd & args] `(defn ~cmd [~@args] (bx ~(str cmd) ~@args)))
 
-
+(defn create-json-fn [name]
+  (let [bx-fn (partial bx name "-f" "json")]
+    (fn [& args]
+      (json/read-json (apply bx-fn args)))))
 
 (def-bx hd-new entropy)
 (def-bx hd-to-public hd-private-key)
@@ -45,8 +48,31 @@
 
 (def-bx hd-to-ec hd-key)
 (def-bx ec-to-address ec-public-key)
+
+;;online
+(def-bx fetch-height)
+
+
+(defn fetch-header [height-or-hash]
+  (let [the-fn (create-json-fn "fetch-header")] 
+    (if (number? height-or-hash)
+      (the-fn "-t" (str height-or-hash))
+      (the-fn "-s" height-or-hash))))
+
 (defn fetch-balance [payment-address]
-  (json/read-json (bx "fetch-balance" "-f" "json" payment-address)))
+  ((create-json-fn "fetch-balance") payment-address))
+
+(defn fetch-history [payment-address]
+  ((create-json-fn "fetch-history") payment-address))
+
+(defn fetch-tx [base-16-hash]
+  ((create-json-fn "fetch-tx") base-16-hash))
+
+(defn fetch-tx-index [base-16-hash]
+  ((create-json-fn "fetch-tx-index") base-16-hash))
+
+(defn fetch-stealth [base-2-filter]
+  ((create-json-fn "fetch-stealth") base-2-filter))
 
 ;;hash commands
 (def-bx sha160 base16-value)
@@ -80,4 +106,7 @@
 (def-wallet-root ledger-nano "m/44'/0'/0'") 
 
 (def-wallet-root trezor-one "m/44'/0'/0'")
+
+
+
 
