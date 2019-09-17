@@ -77,7 +77,7 @@
 (def-bx ek-address passphrase-seed)
 
 ;;online
-(def-bx fetch-height)
+(defn fetch-height [] (read-string (bx "fetch-height")))
 
 
 (defn fetch-header [height-or-hash]
@@ -144,36 +144,37 @@
 
 ;;useful stuff
 
-(defn- _root-key-of [hd-public-key derivation-path]
+(defn- _root-key-of [hd-private-key derivation-path]
   (if (empty? derivation-path)
-    hd-public-key
-    (let [index (first derivation-path)]
+    hd-private-key
+    (let [index (first derivation-path)
+          hardened (.endsWith index "'")]
       (_root-key-of 
-        (hd-public hd-public-key (read-string (if (.endsWith index "'") (apply str (butlast index)) index))) 
+        (hd-private hd-private-key (read-string (if hardened (apply str (butlast index)) index)) hardened) 
         (rest derivation-path)))))
 
-(defn root-key-of [hd-public-key derivation-path]
-  (_root-key-of hd-public-key (rest (.split derivation-path "/"))))
+(defn root-key-of [hd-private-key derivation-path]
+  (_root-key-of hd-private-key (rest (.split derivation-path "/"))))
 
 (defmacro def-wallet-root [name derivation-path]
-  `(defn ~name [hd-public-key#]
-     (let [root# (root-key-of hd-public-key# ~derivation-path)]
+  `(defn ~name [hd-private-key#]
+     (let [root# (root-key-of hd-private-key# ~derivation-path)]
        (fn [ix#]
          (hd-public root# ix#)))))
   
-(def-wallet-root ledger-nano "m/44'/0'/0'") 
+(def-wallet-root ledger-nano-legacy "m/44'/0'/0'") 
+(def-wallet-root ledger-nano-segwit "m/49'/0'/0'") 
 
 (def-wallet-root trezor-one "m/44'/0'/0'")
 
 
-(defn balance-of [hd-public-key]
-  (let [the-fn (partial hd-public hd-public-key)]
+(defn balance-of [hd-private-key hardened]
+  (let [the-fn #(hd-private hd-private-key % hardened)]
     (loop [ix 0
            balance 0]
-      (let [b (:balance (-> ix the-fn hd-to-ec ec-to-address fetch-balance))
+      (let [b (:balance (-> ix the-fn hd-to-public hd-to-ec ec-to-address fetch-balance))
             r (-> b :received read-string)
             s (-> b :spent read-string)]
-        
         (if (<= r 0)
           balance
           (recur (inc ix) (- (+ balance r) s)))))))
