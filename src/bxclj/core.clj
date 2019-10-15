@@ -36,7 +36,9 @@
 (def-bx hd-to-public hd-private-key)
 (def-bx mnemonic-new seed)
 
-(defn mnemonic-to-seed [& words] (bx "mnemonic-to-seed" words))
+(defn mnemonic-to-seed 
+  ([words] (apply (partial bx "mnemonic-to-seed") (.split words " ")))
+  ([words pwd] (apply (partial bx "mnemonic-to-seed" "-p" pwd) (.split words " "))))
 
 (defn seed [bit-length]
   (bx "seed" "-b" (str bit-length)))
@@ -180,3 +182,46 @@
           (recur (inc ix) (- (+ balance r) s)))))))
 
 
+
+
+(def btc-start-reward  50)
+(def halving 210000)  
+(def max-btc-circulation 21e6)
+(def reward-period-in-minutes 10)
+(def rewards-per-year (* 365 24 (/ 60 reward-period-in-minutes)))
+
+(defn blocks-after-halving [h] (mod h halving))
+(defn blocks-until-halving [h] (- halving (blocks-after-halving h)))
+
+(defn blocks [height]
+  (let [b (map (fn [_] halving) (range (int (/ height halving))))
+        bh (blocks-after-halving height)]
+    (if (> bh 0)
+      (concat b [bh])
+      b)))
+
+(defn rewards 
+  ([] (rewards btc-start-reward))
+  ([r] (lazy-seq (cons r (rewards (/ r 2))))))
+
+(defn block-and-rewards [h]
+  (let [b (blocks h)]
+    (map (fn [b r] [b r]) b (take (count b) (rewards)))))
+
+
+(defn block-and-reward-pair 
+  [height]
+  (let [bh (reverse (block-and-rewards height))]
+    (mapcat (fn [[h r]] (map (fn [_] r) (range h))) bh)))
+
+(defn reward-of [height] (-> height  block-and-rewards last second))
+
+(defn btc-circulation [height]
+  (long (reduce (fn [acc [b r]] (+ acc (* b r))) 0 (block-and-rewards height))))
+                        
+(defn sf-of [height]
+  (let [now (btc-circulation height)
+        inflation (- now (btc-circulation (max (- height rewards-per-year) 0)))
+        ]
+    (/ now inflation)
+  ))
