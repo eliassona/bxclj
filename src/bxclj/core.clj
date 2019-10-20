@@ -1,7 +1,9 @@
 (ns bxclj.core
   (:use [clojure.pprint])
   (:require [clojure.java.shell :refer [sh]]
-            [clojure.data.json :as json]))
+            [clojure.data.json :as json])
+  (:import [java.util.concurrent TimeUnit]
+           [java.util Calendar]))
 
 
 (defmacro dbg [body]
@@ -186,9 +188,10 @@
 
 (def btc-start-reward  50)
 (def halving 210000)  
-(def max-btc-circulation 21e6)
+(def btc-max-circulation 21e6)
 (def reward-period-in-minutes 10)
-(def rewards-per-year (* 365 24 (/ 60 reward-period-in-minutes)))
+(def rewards-per-day (* 24 (/ 60 reward-period-in-minutes)))
+(def rewards-per-year (* 365 rewards-per-day))
 
 (defn blocks-after-halving [h] (mod h halving))
 (defn blocks-until-halving [h] (- halving (blocks-after-halving h)))
@@ -204,8 +207,8 @@
   ([] (rewards btc-start-reward))
   ([r] (lazy-seq (cons r (rewards (/ r 2))))))
 
-(defn block-and-rewards [h]
-  (let [b (blocks h)]
+(defn block-and-rewards [height]
+  (let [b (blocks height)]
     (map (fn [b r] [b r]) b (take (count b) (rewards)))))
 
 
@@ -216,12 +219,29 @@
 
 (defn reward-of [height] (-> height  block-and-rewards last second))
 
-(defn btc-circulation [height]
+(defn circulation-btc [height]
   (long (reduce (fn [acc [b r]] (+ acc (* b r))) 0 (block-and-rewards height))))
                         
-(defn sf-of [height]
-  (let [now (btc-circulation height)
-        inflation (- now (btc-circulation (max (- height rewards-per-year) 0)))
+(defn stock->flow-of [height]
+  (let [now (circulation-btc height)
+        inflation (- now (circulation-btc (max (- height rewards-per-year) 0)))
         ]
-    (/ now inflation)
-  ))
+    (/ now inflation)))
+
+(defn sf-marketcap-of [sf]
+  (* (Math/exp 14.6) (Math/pow sf 3.3)))
+
+(defn sf-price-btc-of [height]
+  (/ (-> height stock->flow-of sf-marketcap-of) (circulation-btc height)))
+
+(defn height->time [height]
+  (+ (* (- height (fetch-height)) (.toMillis (TimeUnit/MINUTES) reward-period-in-minutes)) 
+    (System/currentTimeMillis)))
+
+(defn time-millis->date [time]
+  (let [c (Calendar/getInstance)]
+    (.setTimeInMillis c time)
+    {:year (.get c Calendar/YEAR)
+     :month (inc (.get c Calendar/MONTH))
+     :day (.get c Calendar/DAY_OF_MONTH)}))
+  
